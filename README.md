@@ -329,24 +329,23 @@
 ### 3. 学习产出沉淀
 
 建议共同维护一个 Git 知识库：
-
-nlp-study-group/
-├── week01-word2vec/
-│   ├── notes.md          # 主讲人笔记 + 讨论精华
-│   ├── questions.md      # 挑战者问题及全员讨论答案
-│   ├── demo.ipynb        # 连接者代码演示
-│   └── papers/           # 本周核心论文PDF
-├── week02-rnn/
-│   └── ...
-├── resources/            # 长期维护的资料索引
-│   ├── awesome-papers.md
-│   ├── useful-blogs.md
-│   └── cheatsheets/      # 公式速查表
-└── README.md             # 小组介绍与规划
+    Architect-of-the-Tower-of-Babel/
+    ├── week01-word2vec/
+    │   ├── notes.md          # 主讲人笔记 + 讨论精华
+    │   ├── questions.md      # 挑战者问题及全员讨论答案
+    │   ├── demo.ipynb        # 连接者代码演示
+    │   └── papers/           # 本周核心论文PDF
+    ├── week02-rnn/
+    │   └── ...
+    ├── resources/            # 长期维护的资料索引
+    │   ├── awesome-papers.md
+    │   ├── useful-blogs.md
+    │   └── cheatsheets/      # 公式速查表
+    └── README.md             # 小组介绍与规划
 
 ---
 
-### 4. 新增：滚动回顾机制
+### 4. 滚动回顾机制
 
 - **每月一次**：在当月最后一次会议的最后15分钟，快速回顾本月学过的所有核心概念，讨论它们之间的联系。例如：
   - 第4周：Attention如何解决了第2周RNN的长距离依赖问题？
@@ -399,5 +398,6 @@ nlp-study-group/
 12周后，你们对 NLP 的理解将有质的飞跃！
 
 ---
+
 
 **祝学习顺利！** 🚀
