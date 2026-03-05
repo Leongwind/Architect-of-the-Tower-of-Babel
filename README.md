@@ -329,6 +329,7 @@
 ### 3. 学习产出沉淀
 
 建议共同维护一个 Git 知识库：
+```
     Architect-of-the-Tower-of-Babel/
     ├── week01-word2vec/
     │   ├── notes.md          # 主讲人笔记 + 讨论精华
@@ -342,7 +343,7 @@
     │   ├── useful-blogs.md
     │   └── cheatsheets/      # 公式速查表
     └── README.md             # 小组介绍与规划
-
+```
 ---
 
 ### 4. 滚动回顾机制
@@ -401,3 +402,4 @@
 
 
 **祝学习顺利！** 🚀
+
