@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RNN 动画解析：从宏观到微观</title>
+    <style>
+        :root { --rnn-blue: #2196F3; --input-gold: #FFC107; --error-red: #F44336; --output-green: #4CAF50; }
+        body { font-family: 'Segoe UI', system-ui; background: #f0f2f5; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 900px; }
+        h1 { text-align: center; color: #333; }
+        
+        /* 舞台区域 */
+        #stage {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background: #fafafa;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        /* 静态节点 */
+        .node {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 5;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .x-node { background: var(--input-gold); bottom: 40px; }
+        .h-node { background: var(--rnn-blue); color: white; top: 165px; border: 3px solid #1976D2; }
+        .y-node { background: var(--output-green); color: white; top: 40px; }
+
+        /* 动画粒子 */
+        .particle {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            z-index: 10;
+            transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 状态说明面板 */
+        #panel {
+            background: #333;
+            color: #adff2f;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            min-height: 80px;
+            margin-top: 20px;
+        }
+
+        .btn-group { display: flex; gap: 15px; justify-content: center; }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-forward { background: var(--rnn-blue); color: white; }
+        .btn-backward { background: var(--error-red); color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>RNN 动态推导：先看大体，再拆小节</h1>
+        
+        <div class="btn-group">
+            <button class="btn-forward" onclick="runForward()">1. 演示前向计算 (大体流动)</button>
+            <button class="btn-backward" onclick="runBPTT()">2. 演示 BPTT (微观衰减)</button>
+            <button onclick="reset()">重置</button>
+        </div>
+
+        <div id="stage">
+            <div class="node x-node" style="left: 150px;">x₁</div>
+            <div class="node h-node" id="cell1" style="left: 150px;">h₁</div>
+            <div class="node y-node" style="left: 150px;">y₁</div>
+
+            <div class="node x-node" style="left: 400px;">x₂</div>
+            <div class="node h-node" id="cell2" style="left: 400px;">h₂</div>
+            <div class="node y-node" style="left: 400px;">y₂</div>
+
+            <div class="node x-node" style="left: 650px;">x₃</div>
+            <div class="node h-node" id="cell3" style="left: 650px;">h₃</div>
+            <div class="node y-node" style="left: 650px;">y₃</div>
+        </div>
+
+        <div id="panel">> 准备就绪。请选择演示步骤。</div>
+    </div>
+
+    <script>
+        const stage = document.getElementById('stage');
+        const panel = document.getElementById('panel');
+
+        function log(msg) { panel.innerHTML = `> ${msg}`; }
+
+        function createParticle(color, left, top) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.backgroundColor = color;
+            p.style.left = left + 'px';
+            p.style.top = top + 'px';
+            stage.appendChild(p);
+            return p;
+        }
+
+        function move(p, left, top, size = 14, opacity = 1) {
+            return new Promise(res => {
+                setTimeout(() => {
+                    p.style.left = left + 'px';
+                    p.style.top = top + 'px';
+                    p.style.width = size + 'px';
+                    p.style.height = size + 'px';
+                    p.style.opacity = opacity;
+                    setTimeout(res, 750);
+                }, 10);
+            });
+        }
+
+        async function runForward() {
+            reset();
+            const steps = [150, 400, 650];
+            for(let i=0; i<steps.length; i++) {
+                log(`处理时刻 t=${i+1}: h<sub>${i+1}</sub> = tanh(W<sub>xh</sub>x<sub>${i+1}</sub> + W<sub>hh</sub>h<sub>${i}</sub>)`);
+                
+                // 输入上升
+                const pIn = createParticle('#FFC107', steps[i]+28, 300);
+                await move(pIn, steps[i]+28, 200);
+
+                // 节点激活效果
+                const cell = document.getElementById(`cell${i+1}`);
+                cell.style.transform = 'scale(1.2)';
+                setTimeout(() => cell.style.transform = 'scale(1)', 300);
+
+                // 输出上升 & 记忆右移
+                const pOut = createParticle('#4CAF50', steps[i]+28, 200);
+                move(pOut, steps[i]+28, 50);
+
+                if(i < 2) {
+                    const pMem = createParticle('#2196F3', steps[i]+28, 200);
+                    await move(pMem, steps[i+1]+28, 200);
+                }
+            }
+            log("前向传播完成。注意：所有时刻共享同一套 W 参数矩阵。");
+        }
+
+        async function runBPTT() {
+            reset();
+            log("BPTT 开始：误差从 t=3 沿着时间轴向回传导...");
+            
+            let pErr = createParticle('#F44336', 678, 50);
+            await move(pErr, 678, 200); // 从输出回到隐藏层
+
+            const steps = [678, 428, 178];
+            for(let i=0; i<2; i++) {
+                const strength = Math.pow(0.4, i+1);
+                log(`回传至 t=${2-i}: 梯度经过连乘 W<sub>hh</sub><sup>T</sup> ... 剩余强度: ${strength.toFixed(3)}`);
+                
+                // 向左回传，体积变小透明度降低
+                await move(pErr, steps[i+1], 200, 14 * strength, 0.3 + strength);
+            }
+            log("<strong>梯度消失！</strong> 误差信号在传到序列开头时已几乎为0，导致长距离记忆失效。");
+        }
+
+        function reset() {
+            document.querySelectorAll('.particle').forEach(p => p.remove());
+            log("重置完成。");
+        }
+    </script>
+</body>
+</html>

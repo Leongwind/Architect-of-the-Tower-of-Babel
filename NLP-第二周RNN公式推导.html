@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RNN 核心原理深度解析</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px;
+            background: #f8f9fa;
+            font-size: 18px;
+        }
+        .section {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+            border-left: 8px solid #4CAF50;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .section.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 50px; font-size: 2.5em; }
+        h2 { color: #4CAF50; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-top: 40px; }
+        h3 { color: #2196F3; margin-top: 30px; }
+        .explanation {
+            background: #e0f2f7;
+            border-left: 5px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .math-box {
+            background: #f0f8ff;
+            padding: 25px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 25px 0;
+            border: 1px dashed #a7d9f7;
+            font-size: 1.1em;
+        }
+        .formula-annotation {
+            margin-top: 15px;
+            padding-left: 20px;
+            border-left: 3px solid #ccc;
+            font-size: 0.9em;
+            color: #555;
+        }
+        .formula-annotation strong { color: #000; }
+        .formula-annotation span { display: block; margin-bottom: 5px; }
+
+        /* Button styles */
+        .nav-buttons {
+            text-align: center;
+            margin-top: 50px;
+            position: sticky;
+            bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 -2px 15px rgba(0,0,0,0.05);
+        }
+        .nav-buttons button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 1.1em;
+            margin: 0 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .nav-buttons button:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        .nav-buttons button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* RNN Flow Chart Styles */
+        .rnn-flow-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            margin: 40px 0;
+        }
+        .rnn-flow-unit {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 15px;
+            position: relative;
+            background: #f7fcfb;
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            padding: 15px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease-out;
+            transform: scale(0.9);
+            opacity: 0;
+        }
+        .rnn-flow-unit.animate-in {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .rnn-flow-unit:nth-child(even) { border-color: #2196F3; } /* Different color for alternating units */
+
+
+        .rnn-flow-label {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .rnn-input, .rnn-output, .rnn-hidden {
+            padding: 5px 10px;
+            margin: 3px 0;
+            border-radius: 5px;
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            font-size: 0.9em;
+            color: #333;
+        }
+        .rnn-hidden { background: #e3f2fd; border-color: #bbdefb; }
+
+        .arrow {
+            font-size: 2em;
+            color: #666;
+            margin: 0 10px;
+            animation: bounce-arrow 1s infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .arrow.animate-in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @keyframes bounce-arrow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* Specific animation for forward pass */
+        .forward-animation .rnn-input,
+        .forward-animation .rnn-hidden,
+        .forward-animation .rnn-output {
+            animation: pulse-light 1.5s ease-out forwards;
+        }
+        @keyframes pulse-light {
+            0% { box-shadow: 0 0 0 rgba(76, 175, 80, 0.4); }
+            50% { box-shadow: 0 0 15px rgba(76, 175, 80, 0.6); }
+            100% { box-shadow: 0 0 0 rgba(76, 175, 80, 0); }
+        }
+        .forward-animation .rnn-hidden.h_prev {
+             animation: pulse-light 1.5s ease-out 0.5s forwards; /* Start slightly later */
+        }
+        .forward-animation .rnn-hidden.h_curr,
+        .forward-animation .rnn-output.y_curr {
+             animation: pulse-light 1.5s ease-out 1s forwards; /* Start even later */
+        }
+        /* Specific animation for backward pass */
+        .backward-animation .rnn-hidden,
+        .backward-animation .rnn-output {
+            animation: pulse-red 1.5s ease-out forwards;
+        }
+         @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 rgba(244, 67, 54, 0.4); }
+            50% { box-shadow: 0 0 15px rgba(244, 67, 54, 0.6); }
+            100% { box-shadow: 0 0 0 rgba(244, 67, 54, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>RNN 核心原理深度解析</h1>
+
+    <div class="section" id="section0">
+        <h2>导语</h2>
+        <p>欢迎来到 RNN 的世界！本页面将带你一步步深入理解循环神经网络 (Recurrent Neural Network) 的工作原理。</p>
+        <p>我们将从其独特的“循环”结构开始，逐步揭示其前向传播的数学逻辑，最终剖析其训练的核心——BPTT (Backpropagation Through Time) 反向传播机制。</p>
+        <p>准备好了吗？点击“下一步”开始探索！</p>
+    </div>
+
+    <div class="section" id="section1">
+        <h2>1. RNN 流程图：宏观结构与展开</h2>
+        <p>RNN 的独特之处在于它能够处理序列数据（如文字、语音），并且具有“记忆”能力。</p>
+        <h3>1.1 循环的本质：单一单元的复用</h3>
+        <p>一个 RNN 的核心结构可以概括为一个简单的循环单元：</p>
+        <div class="rnn-flow-container">
+            <div class="rnn-flow-unit animate-in">
+                <div class="rnn-flow-label">上一个时刻的记忆</div>
+                <div class="rnn-hidden">\(h_{t-1}\)</div>
+            </div>
+            <div class="arrow animate-in">➡️</div>
+            <div class="rnn-flow-unit animate-in">
+                <div class="rnn-flow-label">当前输入</div>
+                <div class="rnn-input">\(x_t\)</div>
+                <div class="rnn-flow-label">RNN 单元</div>
+                <div style="font-size: 2em; margin: 10px 0; color: #4CAF50;">⚙️</div>
+                <div class="rnn-flow-label">当前输出</div>
+                <div class="rnn-output">\(y_t\)</div>
+                <div class="rnn-flow-label">当前记忆</div>
+                <div class="rnn-hidden">\(h_t\)</div>
+            </div>
+            <div class="arrow animate-in">🔁</div>
+            <div class="rnn-flow-unit animate-in" style="width: 150px; text-align: center; border-style: dashed;">
+                <div class="rnn-flow-label">下一时刻</div>
+                <div class="rnn-hidden">\(h_t\) 作为 \(h_{t-1}\)</div>
+            </div>
+        </div>
+        <div class="explanation">
+            <p>这个循环表示：当前的记忆 \(h_t\) 会被作为下一个时间步的“上一个时刻的记忆” \(h_{t-1}\) 使用。</p>
+            <p><strong>参数共享</strong>是 RNN 的一个核心特点：在每一次循环中，RNN 单元内部的权重参数是保持不变的。</p>
+        </div>
+
+        <h3>1.2 “展开”的视角：序列处理过程</h3>
+        <p>为了更直观地理解 RNN 如何处理一个序列（比如一个句子），我们把它在时间轴上“展开”：</p>
+        <div class="rnn-flow-container" id="rnn-unrolled-flow">
+            </div>
+        <div class="explanation">
+            <p>可以看到，一个长序列被分解为一系列的步骤。每个时间步 \(t\) 都会处理序列中的一个元素 \(x_t\)。</p>
+            <p>重要的是：每个灰色方框（RNN 单元）虽然看起来是独立的，但它们内部的权重参数是**完全共享**的！</p>
+        </div>
+    </div>
+
+    <div class="section" id="section2">
+        <h2>2. RNN 从 0 到 1：前向推导 (Forward Pass)</h2>
+        <p>现在，我们来看看 RNN 单元内部是如何进行计算的。在每个时间步 \(t\)，它接收 \(x_t\) 和 \(h_{t-1}\)，然后计算 \(h_t\) 和 \(y_t\)。</p>
+
+        <h3>2.1 隐藏状态 \(h_t\) 的计算</h3>
+        <p>隐藏状态 \(h_t\) 是 RNN 的“记忆”。它融合了当前输入 \(x_t\) 和上一个时间步的记忆 \(h_{t-1}\)。</p>
+        <div class="math-box">
+            $$h_t = \tanh(W_{hh}h_{t-1} + W_{xh}x_t + b_h)$$
+        </div>
+        <div class="formula-annotation">
+            <span><strong>\(h_t\)</strong>: 当前时间步 \(t\) 的隐藏状态（记忆）。</span>
+            <span><strong>\(\tanh\)</strong>: 激活函数，通常是双曲正切函数，将值缩放到 (-1, 1) 之间。</span>
+            <span><strong>\(W_{hh}\)</strong>: 连接上一个隐藏状态 \(h_{t-1}\) 到当前隐藏状态 \(h_t\) 的权重矩阵。这是**记忆权重**。</span>
+            <span><strong>\(h_{t-1}\)</strong>: 上一个时间步 \(t-1\) 的隐藏状态。</span>
+            <span><strong>\(W_{xh}\)</strong>: 连接当前输入 \(x_t\) 到当前隐藏状态 \(h_t\) 的权重矩阵。</span>
+            <span><strong>\(x_t\)</strong>: 当前时间步 \(t\) 的输入向量。</span>
+            <span><strong>\(b_h\)</strong>: 隐藏状态计算的偏置向量。</span>
+        </div>
+        <div class="explanation forward-animation" id="forward-h-anim">
+            <p><strong>动画演示：</strong>输入 \(x_t\) 和记忆 \(h_{t-1}\) 流入 RNN 单元，经过加权求和和激活函数，生成新的记忆 \(h_t\)。</p>
+             <div class="rnn-flow-container">
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">记忆 (t-1)</div>
+                    <div class="rnn-hidden h_prev">\(h_{t-1}\)</div>
+                </div>
+                <div class="arrow animate-in">➡️</div>
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">输入 (t)</div>
+                    <div class="rnn-input x_curr">\(x_t\)</div>
+                    <div class="rnn-flow-label">RNN 单元</div>
+                    <div style="font-size: 2em; margin: 10px 0; color: #4CAF50;">⚙️</div>
+                    <div class="rnn-flow-label">新记忆 (t)</div>
+                    <div class="rnn-hidden h_curr">\(h_t\)</div>
+                </div>
+            </div>
+        </div>
+
+
+        <h3>2.2 输出 \(y_t\) 的计算</h3>
+        <p>在计算出当前记忆 \(h_t\) 后，我们通常会根据它来生成当前时间步的输出 \(y_t\)。</p>
+        <div class="math-box">
+            $$y_t = \text{softmax}(W_{yh}h_t + b_y)$$
+        </div>
+        <div class="formula-annotation">
+            <span><strong>\(y_t\)</strong>: 当前时间步 \(t\) 的输出向量（例如，下一个词的概率分布）。</span>
+            <span><strong>\(\text{softmax}\)</strong>: 激活函数，通常用于多分类任务，将输出转化为概率分布。</span>
+            <span><strong>\(W_{yh}\)</strong>: 连接当前隐藏状态 \(h_t\) 到当前输出 \(y_t\) 的权重矩阵。</span>
+            <span><strong>\(h_t\)</strong>: 当前时间步 \(t\) 的隐藏状态。</span>
+            <span><strong>\(b_y\)</strong>: 输出计算的偏置向量。</span>
+        </div>
+         <div class="explanation forward-animation" id="forward-y-anim">
+            <p><strong>动画演示：</strong>从当前记忆 \(h_t\) 生成输出 \(y_t\)。</p>
+             <div class="rnn-flow-container">
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">当前记忆 (t)</div>
+                    <div class="rnn-hidden h_curr">\(h_t\)</div>
+                </div>
+                <div class="arrow animate-in">➡️</div>
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">输出层</div>
+                    <div style="font-size: 2em; margin: 10px 0; color: #2196F3;">📈</div>
+                    <div class="rnn-flow-label">当前输出 (t)</div>
+                    <div class="rnn-output y_curr">\(y_t\)</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="section" id="section3">
+        <h2>3. BPTT：随时间反向传播 (Backpropagation Through Time)</h2>
+        <p>前向传播只是计算。为了让 RNN 学习（即更新权重），我们需要计算损失函数对所有权重（\(W_{hh}, W_{xh}, W_{yh}\) 等）的梯度，然后使用梯度下降法更新它们。</p>
+        <p>由于 RNN 的权重在所有时间步是共享的，所以反向传播也需要沿着时间轴进行。</p>
+
+        <h3>3.1 总损失的定义</h3>
+        <p>我们定义一个序列的总损失 \(L\)，它是每个时间步损失 \(L_t\) 的总和。</p>
+        <div class="math-box">
+            $$L = \sum_{t=1}^{T} L_t(y_t, \hat{y}_t)$$
+        </div>
+        <div class="formula-annotation">
+            <span><strong>\(L\)</strong>: 整个序列的总损失。</span>
+            <span><strong>\(L_t\)</strong>: 在时间步 \(t\) 计算的损失（例如，交叉熵损失）。</span>
+            <span><strong>\(y_t\)</strong>: 在时间步 \(t\) 的实际（真实）标签或目标值。</span>
+            <span><strong>\(\hat{y}_t\)</strong>: 在时间步 \(t\) 由模型预测的输出。</span>
+        </div>
+
+        <h3>3.2 梯度计算：以 \(W_{hh}\) 为例</h3>
+        <p>我们以计算对**记忆权重 \(W_{hh}\)** 的梯度为例，这是理解 BPTT 的核心。</p>
+        <p>根据链式法则，总损失 \(L\) 对 \(W_{hh}\) 的梯度是所有时间步的贡献之和：</p>
+        <div class="math-box">
+            $$\frac{\partial L}{\partial W_{hh}} = \sum_{t=1}^{T} \frac{\partial L_t}{\partial W_{hh}}$$
+        </div>
+        <p>而每个时间步的贡献 \(\frac{\partial L_t}{\partial W_{hh}}\) 又可以进一步展开：</p>
+        <div class="math-box">
+            $$\frac{\partial L_t}{\partial W_{hh}} = \sum_{k=1}^{t} \frac{\partial L_t}{\partial h_t} \cdot \left( \prod_{j=k+1}^{t} \frac{\partial h_j}{\partial h_{j-1}} \right) \cdot \frac{\partial h_k}{\partial W_{hh}}$$
+        </div>
+        <div class="formula-annotation">
+            <span><strong>\(\frac{\partial L}{\partial W_{hh}}\)</strong>: 总损失 \(L\) 对权重矩阵 \(W_{hh}\) 的梯度。</span>
+            <span><strong>\(\frac{\partial L_t}{\partial W_{hh}}\)</strong>: 时间步 \(t\) 的损失对权重矩阵 \(W_{hh}\) 的梯度。</span>
+            <span><strong>\(\frac{\partial L_t}{\partial h_t}\)</strong>: 时间步 \(t\) 的损失对隐藏状态 \(h_t\) 的梯度。</span>
+            <span><strong>\(\frac{\partial h_j}{\partial h_{j-1}}\)</strong>: 隐藏状态 \(h_j\) 对上一个隐藏状态 \(h_{j-1}\) 的梯度。这一项是**反向传播中关键的“记忆传递”因子**。</span>
+            <span><strong>\(\frac{\partial h_k}{\partial W_{hh}}\)</strong>: 隐藏状态 \(h_k\) 对权重矩阵 \(W_{hh}\) 的梯度。</span>
+            <span><strong>\(\prod_{j=k+1}^{t}\)</strong>: 表示一个连乘操作，从 \(j=k+1\) 到 \(t\) 的所有项相乘。</span>
+        </div>
+         <div class="explanation backward-animation" id="backward-anim">
+            <p><strong>动画演示：</strong>梯度信息如何从当前时间步 \(t\) 反向传递，影响之前时间步 \(k\) 的权重 \(W_{hh}\)。</p>
+            <div class="rnn-flow-container">
+                 <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">损失 (t)</div>
+                    <div class="rnn-output y_curr" style="background: #ffe0b2; border-color: #ffcc80;">\(L_t\)</div>
+                </div>
+                <div class="arrow animate-in" style="color: #f44336;">⬅️</div>
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">输出 (t)</div>
+                    <div class="rnn-output y_curr">\(y_t\)</div>
+                    <div class="rnn-flow-label">当前记忆 (t)</div>
+                    <div class="rnn-hidden h_curr">\(h_t\)</div>
+                </div>
+                <div class="arrow animate-in" style="color: #f44336;">⬅️</div>
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">记忆 (t-1)</div>
+                    <div class="rnn-hidden h_prev">\(h_{t-1}\)</div>
+                    <div class="rnn-flow-label">输入 (t-1)</div>
+                    <div class="rnn-input x_curr">\(x_{t-1}\)</div>
+                </div>
+                <div class="arrow animate-in" style="color: #f44336;">⬅️</div>
+                <div class="rnn-flow-unit animate-in">
+                    <div class="rnn-flow-label">...</div>
+                    <div style="font-size: 2em; margin: 10px 0; color: #f44336;">...</div>
+                </div>
+            </div>
+            <p>注意红色的箭头，它们代表了梯度流动的方向。梯度从输出层向后传播，并沿着时间轴从当前时刻一直回溯到序列的起始时刻。</p>
+        </div>
+
+        <h3>3.3 梯度消失的数学根源</h3>
+        <p>现在，我们聚焦到最核心的问题：为什么 RNN 很难学习到长距离的依赖关系？原因就在于上面公式中的**连乘项**：</p>
+        <div class="math-box">
+            $$\prod_{j=k+1}^{t} \frac{\partial h_j}{\partial h_{j-1}} = \prod_{j=k+1}^{t} W_{hh}^T \cdot \text{diag}(\sigma'(net_j))$$
+        </div>
+        <div class="formula-annotation">
+            <span><strong>\(W_{hh}^T\)</strong>: 隐藏层权重矩阵 \(W_{hh}\) 的转置。</span>
+            <span><strong>\(\text{diag}(\sigma'(net_j))\)</strong>: 一个对角矩阵，其对角线元素是激活函数 \(\sigma\) 在输入 \(net_j\) 处的导数。</span>
+        </div>
+        <div class="explanation">
+            <p>当 $W_{hh}$ 的值小于 1，并且常用的激活函数（如 \(\tanh\)，其导数最大值也为 1，对于 \(\text{sigmoid}\) 最大为 0.25）的导数也小于 1 时，这些小于 1 的数值进行连乘，就会导致结果**指数级地缩小**。</p>
+            <p class="warning">当梯度非常小，趋近于 0 时，我们称之为**梯度消失 (Vanishing Gradient)**。这意味着远端（序列开头）的信息无法有效传递到当前时间步，导致 RNN 无法学习到长距离的依赖关系。</p>
+        </div>
+    </div>
+
+    <div class="section" id="section4">
+        <h2>总结与展望</h2>
+        <p>通过本次深入解析，我们了解了 RNN 的核心工作机制：</p>
+        <ul>
+            <li>**流程图**：RNN 通过时间展开，实现了参数共享和序列处理。</li>
+            <li>**前向推导**：核心公式定义了隐藏状态和输出如何从前一时刻的记忆和当前输入中计算而来。</li>
+            <li>**BPTT**：通过时间反向传播，将损失梯度回传到所有共享的权重上。</li>
+            <li>**梯度消失**：BPTT 中的连乘效应是导致 RNN 难以捕捉长距离依赖的根本原因。</li>
+        </ul>
+        <p>理解了梯度消失，就理解了为什么我们需要更复杂的 RNN 变体，如 **LSTM** (长短期记忆网络) 和 **GRU** (门控循环单元)，它们通过特殊的“门控”机制来缓解梯度消失问题，从而更好地处理长序列数据。</p>
+        <p>感谢您的观看！希望这份详细的解析能帮助您更好地理解 RNN。</p>
+    </div>
+
+    <div class="nav-buttons">
+        <button id="prevBtn" onclick="showSection(-1)" disabled>◀️ 上一步</button>
+        <button id="nextBtn" onclick="showSection(1)">下一步 ▶️</button>
+    </div>
+
+    <script>
+        const sections = document.querySelectorAll('.section');
+        let currentSectionIndex = 0;
+
+        function showSection(offset) {
+            sections[currentSectionIndex].classList.remove('active');
+            currentSectionIndex += offset;
+
+            if (currentSectionIndex < 0) currentSectionIndex = 0;
+            if (currentSectionIndex >= sections.length) currentSectionIndex = sections.length - 1;
+
+            sections[currentSectionIndex].classList.add('active');
+            updateNavigationButtons();
+            scrollToSection(sections[currentSectionIndex]);
+
+            // Specific animations for each section
+            if (currentSectionIndex === 1) {
+                animateUnrolledRNN();
+            }
+            if (currentSectionIndex === 2) {
+                animateForwardPass();
+            }
+             if (currentSectionIndex === 3) {
+                animateBackwardPass();
+            }
+        }
+
+        function scrollToSection(sectionElement) {
+            window.scrollTo({
+                top: sectionElement.offsetTop - 20, // Offset to make it look nicer
+                behavior: 'smooth'
+            });
+        }
+
+        function updateNavigationButtons() {
+            document.getElementById('prevBtn').disabled = currentSectionIndex === 0;
+            document.getElementById('nextBtn').disabled = currentSectionIndex === sections.length - 1;
+        }
+
+        // Initialize first section
+        document.addEventListener('DOMContentLoaded', () => {
+            showSection(0);
+        });
+
+        // Animation for Unrolled RNN (Section 1)
+        function animateUnrolledRNN() {
+            const container = document.getElementById('rnn-unrolled-flow');
+            container.innerHTML = ''; // Clear previous units
+
+            const unitsData = [
+                { label: '记忆 (init)', h: 'h_0', input: null, output: null, delay: 0 },
+                { label: '输入 (t=1)', x: 'x_1', h_prev: 'h_0', h_curr: 'h_1', y: 'y_1', delay: 0.5 },
+                { label: '输入 (t=2)', x: 'x_2', h_prev: 'h_1', h_curr: 'h_2', y: 'y_2', delay: 1 },
+                { label: '输入 (t=3)', x: 'x_3', h_prev: 'h_2', h_curr: 'h_3', y: 'y_3', delay: 1.5 },
+            ];
+
+            unitsData.forEach((data, index) => {
+                const unitDiv = document.createElement('div');
+                unitDiv.className = 'rnn-flow-unit';
+                unitDiv.innerHTML = `
+                    ${data.label ? `<div class="rnn-flow-label">${data.label}</div>` : ''}
+                    ${data.x ? `<div class="rnn-input">\(x_${data.x.split('_')[1]}\)</div>` : ''}
+                    ${data.h_prev ? `<div class="rnn-hidden">\(h_${data.h_prev.split('_')[1]}\)</div>` : ''}
+                    ${(data.x || data.h_prev) && (data.h_curr || data.y) ? `<div style="font-size: 2em; margin: 10px 0; color: #607d8b;">⚙️</div>` : ''}
+                    ${data.h_curr ? `<div class="rnn-hidden">\(h_${data.h_curr.split('_')[1]}\)</div>` : ''}
+                    ${data.y ? `<div class="rnn-output">\(y_${data.y.split('_')[1]}\)</div>` : ''}
+                `;
+                setTimeout(() => {
+                    unitDiv.classList.add('animate-in');
+                    container.appendChild(unitDiv);
+                    if (index < unitsData.length - 1) {
+                        const arrowDiv = document.createElement('div');
+                        arrowDiv.className = 'arrow';
+                        arrowDiv.innerHTML = '➡️';
+                        setTimeout(() => {
+                            arrowDiv.classList.add('animate-in');
+                            container.appendChild(arrowDiv);
+                        }, data.delay * 1000 + 200); // Slight delay for arrow after unit
+                    }
+                }, data.delay * 1000);
+            });
+        }
+
+        // Animation for Forward Pass (Section 2)
+        function animateForwardPass() {
+            document.getElementById('forward-h-anim').classList.add('forward-animation');
+            document.getElementById('forward-y-anim').classList.add('forward-animation');
+        }
+
+        // Animation for Backward Pass (Section 3)
+        function animateBackwardPass() {
+            document.getElementById('backward-anim').classList.add('backward-animation');
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>RNN家族深度解密：可视化的门控机制与公式同步</title>
+    <script>
+        window.MathJax = {
+            loader: {load: ['[tex]/html']},
+            tex: {
+                packages: {'[+]': ['html']},
+                inlineMath: [['$', '$'], ['\\(', '\\)']], 
+                displayMath: [['$$', '$$']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    
+    <style>
+        :root { --rnn-red: #ff7675; --lstm-green: #55efc4; --gru-purple: #a29bfe; --dark: #2d3436; --text-gray: #636e72; --gate-gold: #fbc02d; --explode-red: #d63031;}
+        body { font-family: 'PingFang SC', 'Helvetica Neue', sans-serif; background: #f0f2f7; color: #2d3436; padding: 20px; line-height: 1.6; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .lab-card { background: white; padding: 35px; border-radius: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.06); margin-bottom: 40px; border: 1px solid #eef; position: relative; }
+        
+        /* 标题样式 */
+        h1 { text-align: center; font-size: 2.2em; margin-bottom: 40px; color: #1e272e; }
+        h3 { font-size: 1.5em; margin-top: 0; display: flex; align-items: center; gap: 10px; }
+        
+        /* 演示舞台 */
+        .stage { position: relative; width: 100%; height: 200px; background: var(--dark); border-radius: 16px; overflow: hidden; margin: 20px 0; border: 2px solid #dfe6e9; }
+        .track { position: absolute; width: 100%; height: 2px; background: rgba(255,255,255,0.1); top: 50%; transform: translateY(-50%); }
+        .highway { position: absolute; width: 100%; height: 6px; background: var(--lstm-green); top: 30%; box-shadow: 0 0 20px var(--lstm-green); display: none; opacity: 0.4; }
+        .node { position: absolute; width: 44px; height: 44px; background: #b2bec3; border-radius: 50%; top: 50%; transform: translateY(-50%); z-index: 5; display: flex; align-items: center; justify-content: center; color: #2d3436; font-size: 11px; font-weight: bold; border: 3px solid #636e72; }
+        
+        /* 门控机构可视化组件 */
+        .lstm-gate-barrier { position: absolute; width: 8px; height: 50px; background: var(--gate-gold); top: 30%; transform: translateY(-50%); left: calc(50% + 25px); z-index: 8; transition: transform 0.4s; border-radius: 4px;}
+        .gru-mixer { position: absolute; width: 60px; height: 60px; border: 4px dashed var(--gru-purple); border-radius: 10px; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; display: none;}
+        .trade-off-label { position: absolute; color: white; font-size: 10px; z-index: 11; display: none; font-weight: bold;}
+
+        /* 信号粒子 */
+        .signal { position: absolute; width: 22px; height: 22px; border-radius: 50%; top: 50%; transform: translateY(-50%); z-index: 10; opacity: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; overflow: hidden;}
+
+        /* 控件与面板 */
+        .explanation-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 30px; margin-top: 20px; }
+        .math-box { background: #f8f9fa; padding: 20px; border-radius: 12px; border-left: 6px solid #0984e3; transition: 0.3s;}
+        .concept-box { background: #e3f2fd; padding: 20px; border-radius: 12px; font-size: 0.95em; }
+        .control-panel { margin-top: 15px; background: rgba(255,255,255,0.7); padding: 12px; border-radius: 8px; border: 1px solid #b2bec3; }
+        
+        .tag { padding: 4px 12px; border-radius: 20px; font-size: 0.8em; color: white; text-transform: uppercase; letter-spacing: 1px; }
+        button { width: 100%; padding: 15px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; background: #0984e3; color: white; transition: 0.3s; font-size: 1em; box-shadow: 0 4px 15px rgba(9, 132, 227, 0.3); }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(9, 132, 227, 0.4); }
+        strong { color: #d63031; }
+
+        /* ========= 强力同步特效 (Sync Highlight) ========= */
+        .math-hl { transition: all 0.3s ease-in-out; border-radius: 4px; padding: 0 4px; }
+        /* RNN 爆炸特效 */
+        .hl-rnn.active { background: #ff7675; color: white !important; font-weight: bold; transform: scale(1.2); display: inline-block; text-shadow: 0 0 10px white; }
+        /* LSTM 金色高亮 */
+        .hl-lstm.active { color: #d35400 !important; font-weight: bold; text-shadow: 0 0 10px var(--gate-gold); transform: scale(1.15); display: inline-block; background: #fffde7;}
+        /* GRU 紫色高亮 */
+        .hl-gru.active { color: #5f27cd !important; font-weight: bold; text-shadow: 0 0 10px var(--gru-purple); transform: scale(1.15); display: inline-block; background: #f3e5f5;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>RNN 家族深度解密：公式与动画的超同步</h1>
+
+    <div class="lab-card">
+        <h3><span class="tag" style="background: var(--rnn-red);">普通 RNN</span> 梯度消失 vs 梯度爆炸</h3>
+        <div class="explanation-grid">
+            <div class="math-box">
+                <strong>【数学真相】极限的连乘</strong>
+                <p>在反向传播计算梯度时，误差信号经历链式法则连乘：</p>
+                $$\frac{\partial h_t}{\partial h_k} = \prod_{i=k+1}^t \class{math-hl hl-rnn}{\text{diag}(\sigma'(z_i)) W^T}$$
+                <p><strong>双刃剑：</strong> 连乘是一个极不稳定的结构。如果 $W$ 偏小，梯度指数级衰减（消失）；如果 $W$ 偏大，梯度指数级膨胀（爆炸），直接导致 NaN。</p>
+            </div>
+            <div class="concept-box">
+                <strong>【通俗类比】传声筒游戏</strong>
+                <p>如果每个人传话都弱一点，最后就只剩<b>无声（消失）</b>；如果每个人都添油加醋大声喊，最后就变成了<b>刺耳的噪音（爆炸）</b>。</p>
+                <div class="control-panel">
+                    <label style="font-weight: bold; margin-right: 15px;">模型权重状态：</label>
+                    <label><input type="radio" name="rnn-mode" value="vanish" checked> $W < 1$ (演示消失)</label>
+                    <label style="margin-left: 10px;"><input type="radio" name="rnn-mode" value="explode"> $W > 1$ <span style="color:var(--explode-red); font-weight:bold;">(演示爆炸)</span></label>
+                </div>
+                <button onclick="animateRNN()" style="margin-top:15px; background:var(--rnn-red)">演示误差反向传播</button>
+            </div>
+        </div>
+        <div class="stage"><div class="track"></div>
+            <div class="node" style="left: 10%;">t=1</div><div class="node" style="left: 50%;">t=2</div><div class="node" style="left: 90%;">t=3</div>
+            <div id="p-rnn" class="signal" style="background: var(--rnn-red);"></div>
+        </div>
+    </div>
+
+    <div class="lab-card">
+        <h3><span class="tag" style="background: #27ae60;">LSTM</span> 门控机制：动画-公式实时同步</h3>
+        <div class="explanation-grid">
+            <div class="math-box">
+                <strong>【数学真相】CEC 机制</strong>
+                <p>引入<b>细胞状态 $C_t$</b> 后，求偏导变成了加法：</p>
+                $$\frac{\partial C_t}{\partial C_{t-1}} = \class{math-hl hl-lstm}{\underbrace{f_t}_{\text{遗忘门}}} + (\dots)$$
+                <p><strong>注意看：</strong> 当动画中小球经过黄金闸门（开启）时，上方公式的 $f_t$ 将同步发光。这证明了：正是这行代码打通了梯度的线性通道。</p>
+            </div>
+            <div class="concept-box">
+                <strong>【动画说明】</strong>
+                <p>在 $t=2$ 时刻，红球误差到达。只有当 <b>🔑遗忘门 $f_t$</b> 计算结果接近 1 并开启时，数据才能被送上高速轨道，完美规避连乘。</p>
+                <button onclick="animateLSTM()" style="margin-top:20px; background: #27ae60;">演示公式联动与高速传送</button>
+            </div>
+        </div>
+        <div class="stage"><div class="track"></div>
+            <div id="h-lstm" class="highway"></div>
+            <div id="lstm-gate-f" class="lstm-gate-barrier"></div>
+            <div class="node" style="left: 10%;">t=1</div><div class="node" style="left: 50%;">t=2</div><div class="node" style="left: 90%;">t=3</div>
+            <div id="p-lstm" class="signal" style="background: var(--lstm-green); box-shadow: 0 0 15px var(--lstm-green);"></div>
+        </div>
+    </div>
+
+    <div class="lab-card">
+        <h3><span class="tag" style="background: var(--gru-purple);">GRU</span> 耦合门控：权衡的插值同步</h3>
+        <div class="explanation-grid">
+            <div class="math-box">
+                <strong>【数学真相】门控耦合</strong>
+                <p>遗忘与输入合二为一，公式变为：</p>
+                $$h_t = \class{math-hl hl-gru}{(1 - z_t) \odot h_{t-1}} + \class{math-hl hl-gru}{z_t \odot \tilde{h}_t}$$
+                <p><strong>注意看：</strong> 当动画在中间节点触发混合器时，公式中的两个项会同时高亮，这代表系统正在进行动态插值（腾出旧空间，写入新数据）。</p>
+            </div>
+            <div class="concept-box">
+                <strong>【动画说明】</strong>
+                <p>在 $t=2$ 时刻观察<b>耦合门控 $z_t$</b>：系统不需要两条轨道，而是直接在节点内部进行“此消彼长”的资源再分配。</p>
+                <button onclick="animateGRU()" style="margin-top:20px; background: var(--gru-purple)">演示公式联动与混合更新</button>
+            </div>
+        </div>
+        <div class="stage"><div class="track"></div>
+            <div id="gru-coupled-mixer" class="gru-mixer"></div>
+            <div class="node" style="left: 10%;">t=1</div><div class="node" style="left: 50%;">t=2</div><div class="node" style="left: 90%;">t=3</div>
+            <div id="p-gru" class="signal" style="background: var(--gru-purple); border: 2px solid white;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function reset(p) {
+        p.style.transition = 'none'; p.style.left = '90%'; p.style.width = '24px'; p.style.height = '24px';
+        p.style.opacity = '1'; p.style.top = '50%'; p.style.transform = 'translate(-50%, -50%)';
+        p.style.boxShadow = 'none'; p.style.background = ''; p.innerText = ''; p.style.zIndex = 10;
+    }
+
+    function animateRNN() {
+        const mode = document.querySelector('input[name="rnn-mode"]:checked').value;
+        const p = document.getElementById('p-rnn'); 
+        const mathHL = document.querySelectorAll('.hl-rnn'); // 获取公式高亮节点
+        
+        reset(p);
+        p.style.background = mode === 'explode' ? 'var(--explode-red)' : 'var(--rnn-red)';
+        
+        // 公式高亮启动
+        mathHL.forEach(el => el.classList.add('active'));
+
+        setTimeout(() => {
+            p.style.transition = 'all 1s ease-in';
+            p.style.left = '50%';
+            
+            if(mode === 'vanish') {
+                p.style.width = '12px'; p.style.height = '12px'; p.style.opacity = '0.5';
+            } else {
+                p.style.width = '70px'; p.style.height = '70px'; p.style.boxShadow = '0 0 40px var(--explode-red)'; p.innerText = 'BOOM!';
+            }
+
+            setTimeout(() => { 
+                p.style.left = '10%'; 
+                if(mode === 'vanish') {
+                    p.style.width = '4px'; p.style.height = '4px'; p.style.opacity = '0.1'; 
+                } else {
+                    p.style.width = '250px'; p.style.height = '250px'; p.style.opacity = '0.8'; p.style.fontSize = '30px'; p.style.zIndex = 20;
+                }
+                
+                // 动画结束，取消公式高亮
+                setTimeout(() => mathHL.forEach(el => el.classList.remove('active')), 800);
+            }, 1000);
+        }, 100);
+    }
+
+    function animateLSTM() {
+        const p = document.getElementById('p-lstm'); 
+        const h = document.getElementById('h-lstm');
+        const gateF = document.getElementById('lstm-gate-f');
+        const mathHL = document.querySelectorAll('.hl-lstm'); // 获取公式高亮节点
+        
+        reset(p);
+        p.style.background = 'var(--lstm-green)'; p.style.boxShadow = '0 0 15px var(--lstm-green)';
+        
+        setTimeout(() => {
+            p.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+            p.style.left = 'calc(50% + 25px)';
+            
+            setTimeout(() => {
+                // 🔑 动画：遗忘门开启 | 并且公式同步高亮！
+                gateF.style.transform = 'translateY(-50%) rotate(90deg) translateX(-15px)';
+                mathHL.forEach(el => el.classList.add('active')); // 【关键同步】
+                
+                setTimeout(() => {
+                    p.style.transition = 'all 0.4s ease'; p.style.top = '30%'; h.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        p.style.transition = 'all 1s linear'; p.style.left = '10%';
+                        
+                        setTimeout(() => { 
+                            p.style.transition = 'all 0.4s ease'; p.style.top = '50%';
+                            setTimeout(() => {
+                                h.style.display = 'none';
+                                gateF.style.transform = 'translateY(-50%) rotate(0deg)';
+                                // 公式高亮取消
+                                mathHL.forEach(el => el.classList.remove('active'));
+                            }, 400);
+                        }, 1000);
+                    }, 400);
+                }, 400); 
+            }, 500); 
+        }, 100);
+    }
+
+    function animateGRU() {
+        const p = document.getElementById('p-gru'); 
+        const mixer = document.getElementById('gru-coupled-mixer');
+        const mathHL = document.querySelectorAll('.hl-gru'); // 获取公式高亮节点
+        
+        reset(p);
+        p.style.background = 'var(--gru-purple)'; p.style.border = '2px solid white';
+        
+        setTimeout(() => {
+            p.style.transition = 'all 0.8s cubic-bezier(0.5, 0, 0.5, 1)';
+            p.style.left = '50%';
+            
+            setTimeout(() => {
+                // ⚙️ 动画：混合器启动 | 并且公式两端同步高亮！
+                mixer.style.display = 'block';
+                mathHL.forEach(el => el.classList.add('active')); // 【关键同步】
+                
+                p.style.transform = 'translate(-50%, -50%) scale(1.8)';
+                p.style.background = '#fff';
+                
+                const labelForget = document.createElement('div');
+                labelForget.className = 'trade-off-label';
+                labelForget.innerText = "1 - Zt";
+                labelForget.style.left = "calc(50% - 60px)"; labelForget.style.top = "50%"; labelForget.style.display = 'block'; labelForget.style.color = 'var(--gru-purple)';
+                p.parentNode.appendChild(labelForget);
+
+                const labelInput = document.createElement('div');
+                labelInput.className = 'trade-off-label';
+                labelInput.innerText = "Zt";
+                labelInput.style.left = "calc(50% + 40px)"; labelInput.style.top = "50%"; labelInput.style.display = 'block'; labelInput.style.color = 'var(--lstm-green)';
+                p.parentNode.appendChild(labelInput);
+                
+                setTimeout(() => {
+                    labelForget.remove(); labelInput.remove();
+                    mixer.style.display = 'none';
+                    p.style.transform = 'translate(-50%, -50%) scale(1)';
+                    p.style.background = 'var(--gru-purple)';
+                    p.style.left = '10%';
+                    // 混合完毕，取消公式高亮
+                    mathHL.forEach(el => el.classList.remove('active'));
+                }, 800);
+            }, 800);
+        }, 100);
+    }
+</script>
+</body>
+</html>
